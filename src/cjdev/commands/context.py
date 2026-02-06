@@ -1,7 +1,7 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Optional, final
+from typing import Dict, Optional, final, List
 
 from pydantic import BaseModel, model_validator
 from pydantic_core import Url
@@ -38,13 +38,31 @@ class ContainerConfig(BaseModel):
 
 
 @final
+@dataclass
 class ProjectsConfig(BaseModel):
     cangjie_compiler: Optional["ProjectConfig"] = None
     cangjie_runtime: Optional["ProjectConfig"] = None
     cangjie_test: Optional["ProjectConfig"] = None
+    cangjie_test_framework: Optional["ProjectConfig"] = None
     cangjie_multiplatform_interop: Optional["ProjectConfig"] = None
     cangjie_stdx: Optional["ProjectConfig"] = None
     cangjie_tools: Optional["ProjectConfig"] = None
+
+    def as_list(self) -> List["ProjectConfig"]:
+        result = []
+        for field in fields(self):
+            value = getattr(self, field.name)
+            if value is not None and isinstance(value, ProjectConfig):
+                result.append(value)
+        return result
+    
+    def as_dict(self) -> Dict[str, "ProjectConfig"]:
+        result = dict()
+        for field in fields(self):
+            value = getattr(self, field.name)
+            if value is not None and isinstance(value, ProjectConfig):
+                result.append(value)
+        return result
 
 
 _CONFIG_FILE_NAME = "cjdev.toml"
@@ -70,7 +88,8 @@ class Config(BaseModel):
         toml = dumps(dict)
         path.write_text(toml)
 
-    def find_config() -> Path:
+    @classmethod
+    def find_config(cls) -> Path:
         cwd = Path.cwd()
         config = cwd / _CONFIG_FILE_NAME
         firstAttempt = config

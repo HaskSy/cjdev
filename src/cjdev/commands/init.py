@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from cjdev.commands.git import init_git
 import questionary
 import typer
 from pydantic import ValidationError
@@ -33,7 +34,7 @@ def _init(cjdev_ctx: CjDevContext):
     cfg_path = cjdev_ctx.config_path
     config = _init_config(cfg_path, cjdev_ctx.config)
     init_container(cfg_path, config.container, cjdev_ctx.logger)
-    # TODO: init git
+    init_git(cfg_path, config.projects, cjdev_ctx.logger)
     cjdev_ctx.config = config
 
 
