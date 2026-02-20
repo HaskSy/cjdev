@@ -48,6 +48,6 @@ def cli_cb(
         logger.error(f"Config file is invalid.\n{e}")
         config = Config()
 
-    ctx.obj = CjDevContext(
+    ctx.obj = CjDevContext.create(
         config_path=config_path, config=config, logger=logger, verbose=verbose
     )

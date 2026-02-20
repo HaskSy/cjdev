@@ -28,7 +28,10 @@ def dc(
 _CONTAINER_WORKDIR = "/home/cjdev"
 
 
-def _dc(cjdev_ctx: CjDevContext, args: Annotated[Optional[List[str]], Argument()]):
+def _dc(
+    cjdev_ctx: CjDevContext,
+    args: Annotated[Optional[List[str]], Argument()] = None,
+):
     config = cjdev_ctx.config
     container_cfg = config.container
     logger = cjdev_ctx.logger
@@ -47,15 +50,26 @@ def _dc(cjdev_ctx: CjDevContext, args: Annotated[Optional[List[str]], Argument()
         return
 
     host_workdir = cjdev_ctx.config_path.parent
-    container_pwd = _container_pwd(host_workdir, Path.cwd())
-    container_name = container_cfg.container_name
-    _exec_cmd_in_container(
-        args or ["zsh"], host_workdir, container_pwd, container_name or "cjdev"
-    )
+    current_project = _detect_current_project(cjdev_ctx)
+
+    if current_project:
+        project_worktree = host_workdir / current_project
+        container_workdir = _get_worktree_container_path(
+            host_workdir, project_worktree, current_project
+        )
+    else:
+        container_workdir = _CONTAINER_WORKDIR
+
+    container_pwd = _container_pwd(host_workdir, Path.cwd(), container_workdir)
+    container_name = container_cfg.container_name or "cjdev"
+    _exec_cmd_in_container(args or ["zsh"], host_workdir, container_pwd, container_name)
 
 
 def _exec_cmd_in_container(
-    cmd: List[str], host_workdir: Path, container_pwd: Path, container_name: str
+    cmd: List[str],
+    host_workdir: Path,
+    container_pwd: Path,
+    container_name: str,
 ):
     cmd = [
         "container",
@@ -74,11 +88,42 @@ def _exec_cmd_in_container(
     subprocess.run(args=cmd, executable="docker")
 
 
-def _container_pwd(host_workdir: Path, host_pwd: Path) -> Path:
-    # Cut the prefix
-    # /home/filaco/Projects/cjdev/a/b/c -> /a/b/c
-    relpath = host_pwd.as_posix().removeprefix(host_workdir.as_posix())
-    return Path(_CONTAINER_WORKDIR) / relpath
+def _container_pwd(host_workdir: Path, host_pwd: Path, container_workdir: str) -> Path:
+    try:
+        relpath = host_pwd.as_posix().removeprefix(host_workdir.as_posix())
+    except ValueError:
+        relpath = host_pwd.name
+
+    return Path(container_workdir) / relpath.lstrip("/")
+
+
+def _get_worktree_container_path(
+    workspace_root: Path, project_path: Path, project_name: str
+) -> str:
+    try:
+        project_rel = project_path.as_posix().removeprefix(workspace_root.as_posix())
+    except ValueError:
+        project_rel = project_path.name
+
+    return f"{_CONTAINER_WORKDIR}{project_rel}"
+
+
+def _detect_current_project(cjdev_ctx: CjDevContext) -> Optional[str]:
+    if not cjdev_ctx.worktree_manager:
+        return None
+
+    current_path = Path.cwd()
+    workspace_root = cjdev_ctx.config_path.parent
+
+    for project in cjdev_ctx.worktree_manager.get_all_projects():
+        project_path = workspace_root / project.path
+        try:
+            if current_path.resolve().is_relative_to(project_path.resolve()):
+                return project.name
+        except ValueError:
+            pass
+
+    return None
 
 
 def init_container(cfg_path: Path, cfg: ContainerConfig, logger: logging.Logger):
